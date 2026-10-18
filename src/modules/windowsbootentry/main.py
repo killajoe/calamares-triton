@@ -49,24 +49,22 @@ def handle_systemdboot(efi_directory):
     """
 
     # Get the root mount point and build the full path to the mounted ESP
-    try:
-        installation_root_path = libcalamares.globalstorage.value("rootMountPoint")
-    except KeyError:
+    installation_root_path = libcalamares.globalstorage.value("rootMountPoint")
+    if installation_root_path is None:
         libcalamares.utils.warning('Global storage value "rootMountPoint" missing')
+        return None
 
     install_efi_directory = installation_root_path + efi_directory
 
     # espList holds the list of EFI partitions from the partition module
-    try:
-        efi_partition_list = libcalamares.globalstorage.value("espList")
-    except KeyError:
+    efi_partition_list = libcalamares.globalstorage.value("espList")
+    if efi_partition_list is None:
         libcalamares.utils.warning("No ESP list in global storage")
         return None
 
     # Get the partitions from global storage
-    try:
-        partitions = libcalamares.globalstorage.value("partitions")
-    except KeyError:
+    partitions = libcalamares.globalstorage.value("partitions")
+    if partitions is None:
         libcalamares.utils.warning("partitions missing from global storage")
         return None
 
@@ -124,7 +122,7 @@ def write_grub_config(installation_root_path, filename, entry):
         os.chmod(conf_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
     except os.error as e:
         libcalamares.utils.warning(f"Failed to chmod grub config, the error was: {e}")
-        
+
     return None
 
 
@@ -134,9 +132,8 @@ def handle_grub():
     """
 
     # Get the root mount point
-    try:
-        installation_root_path = libcalamares.globalstorage.value("rootMountPoint")
-    except KeyError:
+    installation_root_path = libcalamares.globalstorage.value("rootMountPoint")
+    if installation_root_path is None:
         libcalamares.utils.warning('Global storage value "rootMountPoint" missing')
         return None
 
@@ -173,7 +170,16 @@ def run():
 
     partitions = libcalamares.globalstorage.value("partitions")
     efi_directory = libcalamares.globalstorage.value("efiSystemPartition")
+
+    # --- prevents a critical NoneType crash ---
+    if efi_directory is None:
+        efi_directory = "/boot/efi"
+    # ------------------------------------------
+
     if fw_type == "efi":
+        if partitions is None:
+            libcalamares.utils.warning("partitions missing from global storage")
+            return None
         esp_found = [p for p in partitions if p["mountPoint"] == efi_directory]
         if not esp_found:
             libcalamares.utils.warning(f"EFI system, but nothing mounted on {efi_directory}")
@@ -182,10 +188,15 @@ def run():
     # Get the boot loader selection from global storage if it is set in the config file
     try:
         gs_name = libcalamares.job.configuration["bootLoaderVar"]
-        boot_loader = libcalamares.globalstorage.value(gs_name)
     except KeyError:
         libcalamares.utils.warning(
-            f"Specified global storage value not found in global storage")
+            f"Specified global storage value not found in job configuration")
+        return None
+
+    boot_loader = libcalamares.globalstorage.value(gs_name)
+    if boot_loader is None:
+        libcalamares.utils.warning(
+            f"Specified global storage value '{gs_name}' not found in global storage")
         return None
 
     # If the user has selected not to install bootloader, bail out here
